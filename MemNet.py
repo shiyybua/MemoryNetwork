@@ -12,11 +12,14 @@ class MemNet:
 
         self.C_embeddings = []
         self.A_embeddings = []
+        # special matrix for temporal encoding
+        self.TA_matrix = []
+        self.TC_matrix = []
+        self.PE = self._position_encoding()
 
         self._embedding()
         self._build_inputs()
         self.model()
-
 
     def _build_inputs(self):
         self._stories = tf.placeholder(tf.int32, [None, self._memory_size, self._sentence_size], name="stories")
@@ -34,6 +37,11 @@ class MemNet:
             self.B_embedding = tf.get_variable("b_embedding", [self._vocab_size, self._embedding_size],
                             initializer=tf.contrib.layers.xavier_initializer())
 
+            self.TA_matrix.append(tf.get_variable('ta_matrix{}'.format(i + 1), [self._memory_size, self._embedding_size],
+                            initializer=tf.contrib.layers.xavier_initializer()))
+            self.TC_matrix.append(tf.get_variable('tc_matrix{}'.format(i + 1), [self._memory_size, self._embedding_size],
+                                              initializer=tf.contrib.layers.xavier_initializer()))
+
     # in the paper section 4.1
     def _position_encoding(self):
         '''
@@ -49,26 +57,30 @@ class MemNet:
                 encode[k][j] = (1 - 1.0*j/J) - (1.0*k/d)*(1-2.0*j/J)
         return tf.convert_to_tensor(np.transpose(encode))
 
-
-
     def _sentence_representation(self, sentence_matrix):
         '''
         :param sentence_matrix: shape: [batch_size, memory_size, sentence_size, embedding_size]
         :return:
         '''
 
+        # use position encoding
+        sentence_matrix *= self.PE
+        # Temporal Encoding
 
-        pass
+
 
 
     def model(self):
         self.query_input = tf.nn.embedding_lookup(self.B_embedding, self._queries)
+        # The shape of self.PE is [sentence_size, embedding_size], so the last two dimensions of query_input
+        # should be [sentence_size, embedding_size] as well.
+        self.query_input *= self.PE
 
 
 
 if __name__ == "__main__":
-    net = MemNet(6,6,6,6,1)
+    net = MemNet(3,6,8,10,1)
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        print(sess.run(net.query_input, feed_dict={net._queries: [[0,1,2,3,4,5]]}))
+        print(sess.run(net.query_input, feed_dict={net._queries: [[0,1,2,3,4,5],[0,1,2,3,4,5]]}))
