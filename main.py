@@ -4,6 +4,7 @@ from __future__ import print_function
 from data_utils import load_task, vectorize_data
 from sklearn import cross_validation, metrics
 from itertools import chain
+from MemNet import MemNet
 
 import tensorflow as tf
 import numpy as np
@@ -80,4 +81,40 @@ batch_size = FLAGS.batch_size
 batches = zip(range(0, n_train-batch_size, batch_size), range(batch_size, n_train, batch_size))
 batches = [(start, end) for start, end in batches]
 
-print(batches)
+with tf.Session() as sess:
+    model = MemNet(memory_size, sentence_size, vocab_size, FLAGS.embedding_size, FLAGS.hops, sess)
+    for t in range(1, FLAGS.epochs+1):
+        np.random.shuffle(batches)
+        total_cost = 0.0
+        for start, end in batches:
+            s = trainS[start:end]
+            q = trainQ[start:end]
+            a = trainA[start:end]
+
+            cost_t = model.train(s, q, a)
+            total_cost += cost_t
+
+        if t % FLAGS.evaluation_interval == 0:
+            train_preds = []
+            for start in range(0, n_train, batch_size):
+                end = start + batch_size
+                s = trainS[start:end]
+                q = trainQ[start:end]
+                pred = model.prediction(s, q)
+                train_preds += list(pred)
+
+
+            val_preds = model.prediction(valS, valQ)
+            train_acc = metrics.accuracy_score(np.array(train_preds), train_labels)
+            val_acc = metrics.accuracy_score(val_preds, val_labels)
+
+            print('-----------------------')
+            print('Epoch', t)
+            print('Total Cost:', total_cost)
+            print('Training Accuracy:', train_acc)
+            print('Validation Accuracy:', val_acc)
+            print('-----------------------')
+
+    test_preds = model.prediction(testS, testQ)
+    test_acc = metrics.accuracy_score(test_preds, test_labels)
+    print("Testing Accuracy:", test_acc)

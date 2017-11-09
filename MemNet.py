@@ -3,7 +3,7 @@ import numpy as np
 # http://arxiv.org/abs/1503.08895v4
 # q8
 class MemNet:
-    def __init__(self, memory_size, sentence_size, vocab_size, embedding_size, hop):
+    def __init__(self, memory_size, sentence_size, vocab_size, embedding_size, hop, sess):
         self._memory_size = memory_size
         self._sentence_size = sentence_size
         self._vocab_size = vocab_size
@@ -20,6 +20,8 @@ class MemNet:
         self._embedding()
         self._build_inputs()
         self.model()
+        self._sess = sess
+        self._sess.run(tf.global_variables_initializer())
 
     def _build_inputs(self):
         self._stories = tf.placeholder(tf.int32, [None, self._memory_size, self._sentence_size], name="stories")
@@ -28,22 +30,21 @@ class MemNet:
         self._lr = 0.1
 
     def _embedding(self):
+        self.B_embedding = tf.get_variable("b_embedding", [self._vocab_size, self._embedding_size],
+                                           initializer=tf.contrib.layers.xavier_initializer())
+        self.final_weight_matrix = tf.get_variable("projection", [self._embedding_size, self._vocab_size],
+                                                   initializer=tf.contrib.layers.xavier_initializer())
         for i in range(self._hop):
             #  index starts from 1
             self.C_embeddings.append(tf.get_variable('c_embedding{}'.format(i + 1), [self._vocab_size, self._embedding_size],
                             initializer=tf.contrib.layers.xavier_initializer()))
             self.A_embeddings.append(tf.get_variable('a_embedding{}'.format(i + 1), [self._vocab_size, self._embedding_size],
                             initializer=tf.contrib.layers.xavier_initializer()))
-            self.B_embedding = tf.get_variable("b_embedding", [self._vocab_size, self._embedding_size],
-                            initializer=tf.contrib.layers.xavier_initializer())
 
             self.TA_matrix.append(tf.get_variable('ta_matrix{}'.format(i + 1), [self._memory_size, self._embedding_size],
                             initializer=tf.contrib.layers.xavier_initializer()))
             self.TC_matrix.append(tf.get_variable('tc_matrix{}'.format(i + 1), [self._memory_size, self._embedding_size],
                                               initializer=tf.contrib.layers.xavier_initializer()))
-
-            self.final_weight_matrix = tf.get_variable("projection", [self._embedding_size, self._vocab_size],
-                            initializer=tf.contrib.layers.xavier_initializer())
 
     # described in the paper section 4.1
     def _position_encoding(self):
@@ -87,23 +88,34 @@ class MemNet:
         for i_hop in range(self._hop):
             sentences = tf.nn.embedding_lookup(self.A_embeddings[i_hop], self._stories)
             m = self._sentence_representation(sentences, self.TA_matrix[i_hop])
+            m = tf.transpose(m, [1, 0, 2])
             # inner product and softmax, formula (1)
             P = tf.nn.softmax(tf.reduce_sum(m * u, axis=2))
+            P = tf.transpose(P, [1,0])  # [batch_size, memory_size]
             c = self._sentence_representation(sentences, self.TC_matrix[i_hop])
             # formula (2)
-            c = tf.transpose(c, [0, 2, 1])
+            c = tf.transpose(c, [2, 0, 1])
             o = tf.reduce_sum(P * c, axis=2)
+            o = tf.transpose(o, [1, 0])
             # the current hop output is the input of next hop.
             u = o + u
 
         # formula (3) without softmax
         projection_layer = tf.matmul(u, self.final_weight_matrix)
 
-        self.loss = tf.nn.softmax_cross_entropy_with_logits(logits=projection_layer, labels=self._answers)
+        self.predict = tf.argmax(projection_layer, 1, name="predict_op")
+        losses = tf.nn.softmax_cross_entropy_with_logits(logits=projection_layer, labels=self._answers)
+        self.loss = tf.reduce_sum(losses)
         self.optimizer = tf.train.AdamOptimizer().minimize(self.loss)
 
+    def train(self, stories, queries, answers):
+        feed_dict = {self._stories: stories, self._queries: queries, self._answers: answers}
+        loss, _ = self._sess.run([self.loss, self.optimizer], feed_dict=feed_dict)
+        return loss
 
-
+    def prediction(self, stories, queries):
+        feed_dict = {self._stories: stories, self._queries: queries}
+        return self._sess.run(self.predict, feed_dict=feed_dict)
 
 
 if __name__ == "__main__":
