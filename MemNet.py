@@ -25,7 +25,7 @@ class MemNet:
         self._stories = tf.placeholder(tf.int32, [None, self._memory_size, self._sentence_size], name="stories")
         self._queries = tf.placeholder(tf.int32, [None, self._sentence_size], name="queries")
         self._answers = tf.placeholder(tf.int32, [None, self._vocab_size], name="answers")
-        self._lr = tf.placeholder(tf.float32, [], name="learning_rate")
+        self._lr = 0.1
 
     def _embedding(self):
         for i in range(self._hop):
@@ -41,6 +41,9 @@ class MemNet:
                             initializer=tf.contrib.layers.xavier_initializer()))
             self.TC_matrix.append(tf.get_variable('tc_matrix{}'.format(i + 1), [self._memory_size, self._embedding_size],
                                               initializer=tf.contrib.layers.xavier_initializer()))
+
+            self.final_weight_matrix = tf.get_variable("projection", [self._embedding_size, self._vocab_size],
+                            initializer=tf.contrib.layers.xavier_initializer())
 
     # described in the paper section 4.1
     def _position_encoding(self):
@@ -80,6 +83,7 @@ class MemNet:
         u *= self.PE
         # convert word embedding to sentence embedding by simply adding.
         u = tf.reduce_sum(u, axis=1)
+
         for i_hop in range(self._hop):
             sentences = tf.nn.embedding_lookup(self.A_embeddings[i_hop], self._stories)
             m = self._sentence_representation(sentences, self.TA_matrix[i_hop])
@@ -89,10 +93,19 @@ class MemNet:
             # formula (2)
             c = tf.transpose(c, [0, 2, 1])
             o = tf.reduce_sum(P * c, axis=2)
+            # the current hop output is the input of next hop.
+            u = o + u
 
-            print (o)
+        # formula (3) without softmax
+        projection_layer = tf.matmul(u, self.final_weight_matrix)
 
-# (?, 3)
+        self.loss = tf.nn.softmax_cross_entropy_with_logits(logits=projection_layer, labels=self._answers)
+        self.optimizer = tf.train.AdamOptimizer().minimize(self.loss)
+
+
+
+
+
 if __name__ == "__main__":
     net = MemNet(3,6,8,10,1)
 
