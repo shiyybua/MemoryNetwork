@@ -16,7 +16,7 @@ tf.flags.DEFINE_float("max_grad_norm", 40.0, "Clip gradients to this norm.")
 tf.flags.DEFINE_integer("evaluation_interval", 10, "Evaluate and print results every x epochs")
 tf.flags.DEFINE_integer("batch_size", 32, "Batch size for training.")
 tf.flags.DEFINE_integer("hops", 3, "Number of hops in the Memory Network.")
-tf.flags.DEFINE_integer("epochs", 100, "Number of epochs to train for.")
+tf.flags.DEFINE_integer("epochs", 300, "Number of epochs to train for.")
 tf.flags.DEFINE_integer("embedding_size", 20, "Embedding size for embedding matrices.")
 tf.flags.DEFINE_integer("memory_size", 50, "Maximum size of memory.")
 tf.flags.DEFINE_integer("task_id", 8, "bAbI task id, 1 <= id <= 20")
@@ -43,7 +43,7 @@ memory_size = min(FLAGS.memory_size, max_story_size)
 for i in range(memory_size):
     word_idx['time{}'.format(i+1)] = 'time{}'.format(i+1)
 
-vocab_size = len(word_idx) + 1 # +1 for nil word
+vocab_size = len(word_idx) + 1
 sentence_size = max(query_size, sentence_size) # for the position
 sentence_size += 1  # +1 for time words
 
